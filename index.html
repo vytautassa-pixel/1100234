@@ -2,21 +2,30 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Viewer with Position Controls</title>
+<title>Viewer with Controls simple</title>
 <style>
 html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:transparent; }
 canvas { display:block; width:100%; height:100%; }
 .controls {
     position: absolute;
     top: 10px; left: 10px;
-    background: rgba(0,0,0,0.3);
+    background: rgba(0,0,0,0.4);
     padding: 10px;
     border-radius: 8px;
     color: white;
     font-family: sans-serif;
+    z-index: 1000;
 }
-.controls label { display:block; font-size: 12px; margin-top: 5px; }
+.controls label { display:block; font-size:12px; margin-top:5px; }
 .controls input { width: 150px; }
+#toggle-controls {
+    position:absolute;
+    top:10px; right:10px;
+    z-index:1001;
+    padding:5px 10px;
+    font-size:12px;
+    border-radius:5px;
+}
 </style>
 
 <script type="importmap">
@@ -32,10 +41,13 @@ canvas { display:block; width:100%; height:100%; }
 <canvas id="viewer-canvas"></canvas>
 
 <div class="controls">
-    <label>X Position <input type="range" id="posX" min="-2" max="2" step="0.01" value="0"></label>
-    <label>Y Position <input type="range" id="posY" min="-2" max="2" step="0.01" value="0"></label>
-    <label>Z Position <input type="range" id="posZ" min="-2" max="2" step="0.01" value="0"></label>
+    <label>X Position <input type="range" id="posX" min="-5" max="5" step="0.01" value="0"></label>
+    <label>Y Position <input type="range" id="posY" min="-5" max="5" step="0.01" value="0"></label>
+    <label>Z Position <input type="range" id="posZ" min="-5" max="5" step="0.01" value="0"></label>
+    <label>Scale <input type="range" id="scale" min="0.1" max="5" step="0.01" value="1"></label>
 </div>
+
+<button id="toggle-controls">Toggle Controls</button>
 
 <script type="module">
 import * as THREE from "three";
@@ -60,7 +72,10 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 1);
 dirLight.position.set(2, 2, 3);
 scene.add(dirLight);
 
-// ------------------- Load Model -------------------
+// ------------------- Model Group (for centered pivot) -------------------
+const group = new THREE.Group();
+scene.add(group);
+
 const MODEL_URL = "https://vytautassa-pixel.github.io/1100234/animated_gudiman.glb";
 const loader = new GLTFLoader();
 
@@ -72,23 +87,23 @@ loader.load(
     (gltf) => {
         model = gltf.scene;
 
-        // Center the model
+        // Center pivot
         const box = new THREE.Box3().setFromObject(model);
         const center = box.getCenter(new THREE.Vector3());
-        model.position.sub(center);
+        model.position.sub(center); // model moves so pivot is center of geometry
 
         // Scale to fit
         const size = box.getSize(new THREE.Vector3());
         const maxDim = Math.max(size.x, size.y, size.z);
         const scaleFactor = 2 / maxDim;
-        model.scale.setScalar(scaleFactor);
+        group.scale.setScalar(scaleFactor);
 
-        scene.add(model);
+        group.add(model);
 
         // Animations
         if(gltf.animations.length){
             mixer = new THREE.AnimationMixer(model);
-            gltf.animations.forEach((clip) => mixer.clipAction(clip).play());
+            gltf.animations.forEach((clip)=> mixer.clipAction(clip).play());
         }
     },
     undefined,
@@ -108,43 +123,48 @@ window.addEventListener("mousemove", (e) => {
     targetRot.x = THREE.MathUtils.clamp(-y * MAX_ROT, -MAX_ROT, MAX_ROT);
 });
 
-// ------------------- Position Controls -------------------
+// ------------------- Position & Scale Controls -------------------
 const posX = document.getElementById("posX");
 const posY = document.getElementById("posY");
 const posZ = document.getElementById("posZ");
+const scaleSlider = document.getElementById("scale");
 
-function updateModelPosition() {
-    if(model){
-        model.position.x = parseFloat(posX.value);
-        model.position.y = parseFloat(posY.value);
-        model.position.z = parseFloat(posZ.value);
-    }
+function updateGroupTransform(){
+    group.position.x = parseFloat(posX.value);
+    group.position.y = parseFloat(posY.value);
+    group.position.z = parseFloat(posZ.value);
+    group.scale.setScalar(parseFloat(scaleSlider.value));
 }
 
-posX.addEventListener("input", updateModelPosition);
-posY.addEventListener("input", updateModelPosition);
-posZ.addEventListener("input", updateModelPosition);
+[posX,posY,posZ,scaleSlider].forEach(input => input.addEventListener("input", updateGroupTransform));
+
+// ------------------- Toggle Controls -------------------
+const controlsDiv = document.querySelector('.controls');
+document.getElementById('toggle-controls').addEventListener('click', () => {
+    controlsDiv.style.display = controlsDiv.style.display === 'none' ? 'block' : 'none';
+});
 
 // ------------------- Animation Loop -------------------
 const clock = new THREE.Clock();
 
-function animate() {
+function animate(){
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
 
     if(mixer) mixer.update(delta);
 
-    // Smooth rotation
+    // Smooth rotation around center pivot
     currentRot.x += (targetRot.x - currentRot.x) * EASE;
     currentRot.y += (targetRot.y - currentRot.y) * EASE;
 
-    if(model){
-        model.rotation.x = currentRot.x;
-        model.rotation.y = currentRot.y;
+    if(group){
+        group.rotation.x = currentRot.x;
+        group.rotation.y = currentRot.y;
     }
 
     renderer.render(scene, camera);
 }
+
 animate();
 
 // ------------------- Resize -------------------
