@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Viewer with Glow</title>
+<title>Animated Gudiman Viewer - Centered Pivot</title>
 <style>
 html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:transparent; }
 canvas { display:block; width:100%; height:100%; }
@@ -81,23 +81,23 @@ const loader = new GLTFLoader();
 
 let model = null;
 let mixer = null;
-let glowMeshes = [];
 
 loader.load(
     MODEL_URL,
     (gltf) => {
         model = gltf.scene;
 
-        // Center pivot
+        // Wrap the model in the group and center pivot
         const box = new THREE.Box3().setFromObject(model);
         const size = box.getSize(new THREE.Vector3());
         const center = box.getCenter(new THREE.Vector3());
-        model.position.sub(center);
+
+        model.position.sub(center); // move model so pivot of group is center
         group.add(model);
 
-        // Scale to fit
+        // Scale to fit screen
         const maxDim = Math.max(size.x, size.y, size.z);
-        const scaleFactor = 2 / maxDim;
+        const scaleFactor = 2 / maxDim; // tweak 2 to fit nicely
         group.scale.setScalar(scaleFactor);
 
         // Animations
@@ -105,25 +105,6 @@ loader.load(
             mixer = new THREE.AnimationMixer(model);
             gltf.animations.forEach((clip) => mixer.clipAction(clip).play());
         }
-
-        // Create glow meshes
-        model.traverse((child)=>{
-            if(child.isMesh){
-                const glowMesh = child.clone();
-                glowMesh.material = new THREE.MeshStandardMaterial({
-                    color: 0xffffff,
-                    emissive: new THREE.Color(0x00ffff),
-                    emissiveIntensity: 0,
-                    metalness: 0.1,
-                    roughness: 0.5,
-                    transparent: true,
-                    opacity: 0.7
-                });
-                glowMesh.scale.multiplyScalar(1.05); // slightly bigger
-                scene.add(glowMesh);
-                glowMeshes.push(glowMesh);
-            }
-        });
     },
     undefined,
     (err) => console.error("GLB load error:", err)
@@ -134,14 +115,12 @@ let targetRot = { x:0, y:0 };
 let currentRot = { x:0, y:0 };
 const MAX_ROT = THREE.MathUtils.degToRad(8);
 const EASE = 0.08;
-let mousePos = new THREE.Vector2(0,0);
 
 window.addEventListener("mousemove", (e) => {
     const x = (e.clientX / window.innerWidth) * 2 - 1;
     const y = (e.clientY / window.innerHeight) * 2 - 1;
     targetRot.y = THREE.MathUtils.clamp(x * MAX_ROT, -MAX_ROT, MAX_ROT);
     targetRot.x = THREE.MathUtils.clamp(-y * MAX_ROT, -MAX_ROT, MAX_ROT);
-    mousePos.set(x, y);
 });
 
 // ------------------- Position & Scale Controls -------------------
@@ -156,6 +135,7 @@ function updateGroupTransform(){
     group.position.z = parseFloat(posZ.value);
     group.scale.setScalar(parseFloat(scaleSlider.value));
 }
+
 [posX,posY,posZ,scaleSlider].forEach(input => input.addEventListener("input", updateGroupTransform));
 
 // ------------------- Toggle Controls -------------------
@@ -164,23 +144,16 @@ document.getElementById('toggle-controls').addEventListener('click', () => {
     controlsDiv.style.display = controlsDiv.style.display === 'none' ? 'block' : 'none';
 });
 
-// ------------------- Glow Update -------------------
-function updateGlow(){
-    if(!model) return;
-    const intensity = THREE.MathUtils.clamp(1.0 - mousePos.length(), 0, 1) * 2; // closer = brighter
-    glowMeshes.forEach(mesh=>{
-        mesh.material.emissiveIntensity = intensity;
-    });
-}
-
 // ------------------- Animation Loop -------------------
 const clock = new THREE.Clock();
+
 function animate(){
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
 
     if(mixer) mixer.update(delta);
 
+    // Smooth rotation around center pivot
     currentRot.x += (targetRot.x - currentRot.x) * EASE;
     currentRot.y += (targetRot.y - currentRot.y) * EASE;
 
@@ -189,7 +162,6 @@ function animate(){
         group.rotation.y = currentRot.y;
     }
 
-    updateGlow();
     renderer.render(scene, camera);
 }
 
