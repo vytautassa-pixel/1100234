@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Viewer with Controls simple</title>
+<title>Animated Gudiman Viewer - Centered Pivot</title>
 <style>
 html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:transparent; }
 canvas { display:block; width:100%; height:100%; }
@@ -64,7 +64,7 @@ const scene = new THREE.Scene();
 
 // ------------------- Camera -------------------
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 100);
-camera.position.set(0, 0, 6);
+camera.position.set(0, 0, 4);
 
 // ------------------- Lights -------------------
 scene.add(new THREE.AmbientLight(0xffffff, 1.2));
@@ -72,7 +72,7 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 1);
 dirLight.position.set(2, 2, 3);
 scene.add(dirLight);
 
-// ------------------- Model Group (for centered pivot) -------------------
+// ------------------- Model Group -------------------
 const group = new THREE.Group();
 scene.add(group);
 
@@ -87,23 +87,23 @@ loader.load(
     (gltf) => {
         model = gltf.scene;
 
-        // Center pivot
+        // Wrap the model in the group and center pivot
         const box = new THREE.Box3().setFromObject(model);
-        const center = box.getCenter(new THREE.Vector3());
-        model.position.sub(center); // model moves so pivot is center of geometry
-
-        // Scale to fit
         const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const scaleFactor = 2 / maxDim;
-        group.scale.setScalar(scaleFactor);
+        const center = box.getCenter(new THREE.Vector3());
 
+        model.position.sub(center); // move model so pivot of group is center
         group.add(model);
+
+        // Scale to fit screen
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scaleFactor = 2 / maxDim; // tweak 2 to fit nicely
+        group.scale.setScalar(scaleFactor);
 
         // Animations
         if(gltf.animations.length){
             mixer = new THREE.AnimationMixer(model);
-            gltf.animations.forEach((clip)=> mixer.clipAction(clip).play());
+            gltf.animations.forEach((clip) => mixer.clipAction(clip).play());
         }
     },
     undefined,
